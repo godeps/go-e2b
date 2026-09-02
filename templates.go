@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // CreateTemplateConfig holds the configuration for creating a new template.
@@ -108,6 +109,37 @@ func WithTemplateBuildsNextToken(token string) GetTemplateOption {
 type GetTemplateResult struct {
 	Template  TemplateWithBuilds
 	NextToken string
+}
+
+// TemplateAlias is the result of looking up a template by alias, namespaced
+// name (project/name), opaque ID, or tagged name (e.g. "my-template:default").
+type TemplateAlias struct {
+	TemplateID string `json:"templateID"`
+	Public     bool   `json:"public"`
+}
+
+// TemplateTag is a label attached to a specific template build.
+type TemplateTag struct {
+	Tag       string `json:"tag"`
+	BuildID   string `json:"buildID"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// AssignedTemplateTags is returned by AssignTemplateTags. Tags contains only
+// the labels from that request, not the full set on the build.
+type AssignedTemplateTags struct {
+	BuildID string   `json:"buildID"`
+	Tags    []string `json:"tags"`
+}
+
+type assignTemplateTagsRequest struct {
+	Target string   `json:"target"`
+	Tags   []string `json:"tags"`
+}
+
+type removeTemplateTagsRequest struct {
+	Name string   `json:"name"`
+	Tags []string `json:"tags"`
 }
 
 // BuildLogEntry holds a single structured log entry from a template build.
@@ -523,6 +555,163 @@ func (c *Client) DeleteTemplate(ctx context.Context, templateID string) error {
 		return nil
 	case http.StatusNotFound:
 		return &TemplateNotFoundError{TemplateID: templateID}
+	default:
+		respBody, _ := io.ReadAll(resp.Body)
+		return &Error{StatusCode: resp.StatusCode, Message: string(respBody)}
+	}
+}
+
+// GetTemplateAlias resolves a template alias, namespaced name, opaque ID, or
+// tagged name (alias:tag) to a template ID. A missing alias returns
+// *TemplateNotFoundError. HTTP 403 (no access, e.g. the public "base"
+// template) is returned as *Error and is not treated as not-found.
+func (c *Client) GetTemplateAlias(ctx context.Context, alias string) (*TemplateAlias, error) {
+	if alias == "" {
+		return nil, &InvalidArgumentError{Message: "alias is required"}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiBaseURL+"/templates/aliases/"+url.PathEscape(alias), nil)
+	if err != nil {
+		return nil, fmt.Errorf("e2b: build get template alias request: %w", err)
+	}
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("e2b: send get template alias request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, &TemplateNotFoundError{TemplateID: alias}
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, &Error{StatusCode: resp.StatusCode, Message: string(respBody)}
+	}
+
+	var aliasResp TemplateAlias
+	if err := json.NewDecoder(resp.Body).Decode(&aliasResp); err != nil {
+		return nil, fmt.Errorf("e2b: decode get template alias response: %w", err)
+	}
+
+	return &aliasResp, nil
+}
+
+// ListTemplateTags lists tags on a template. templateIDOrAlias may be an
+// opaque ID, short alias, or namespaced name (project/name).
+func (c *Client) ListTemplateTags(ctx context.Context, templateIDOrAlias string) ([]TemplateTag, error) {
+	if templateIDOrAlias == "" {
+		return nil, &InvalidArgumentError{Message: "template ID or alias is required"}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiBaseURL+"/templates/"+url.PathEscape(templateIDOrAlias)+"/tags", nil)
+	if err != nil {
+		return nil, fmt.Errorf("e2b: build list template tags request: %w", err)
+	}
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("e2b: send list template tags request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, &TemplateNotFoundError{TemplateID: templateIDOrAlias}
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, &Error{StatusCode: resp.StatusCode, Message: string(respBody)}
+	}
+
+	var tags []TemplateTag
+	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+		return nil, fmt.Errorf("e2b: decode list template tags response: %w", err)
+	}
+
+	return tags, nil
+}
+
+// AssignTemplateTags adds tags to the build selected by target. target is a
+// source selector: "alias:existingTag", "project/name:existingTag", or
+// "alias:<buildID>". The response lists only the tags from this request.
+func (c *Client) AssignTemplateTags(ctx context.Context, target string, tags ...string) (*AssignedTemplateTags, error) {
+	if target == "" {
+		return nil, &InvalidArgumentError{Message: "target is required"}
+	}
+	if len(tags) == 0 {
+		return nil, &InvalidArgumentError{Message: "at least one tag is required"}
+	}
+
+	body, err := json.Marshal(assignTemplateTagsRequest{Target: target, Tags: tags})
+	if err != nil {
+		return nil, fmt.Errorf("e2b: marshal assign template tags request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiBaseURL+"/templates/tags", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("e2b: build assign template tags request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("e2b: send assign template tags request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, &TemplateNotFoundError{TemplateID: target}
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, &Error{StatusCode: resp.StatusCode, Message: string(respBody)}
+	}
+
+	var assigned AssignedTemplateTags
+	if err := json.NewDecoder(resp.Body).Decode(&assigned); err != nil {
+		return nil, fmt.Errorf("e2b: decode assign template tags response: %w", err)
+	}
+
+	return &assigned, nil
+}
+
+// RemoveTemplateTags deletes tags from a template. name is a short alias or
+// namespaced name (project/name), not "name:tag". Missing tags still succeed
+// (idempotent). A missing template returns *TemplateNotFoundError.
+func (c *Client) RemoveTemplateTags(ctx context.Context, name string, tags ...string) error {
+	if name == "" {
+		return &InvalidArgumentError{Message: "name is required"}
+	}
+	if len(tags) == 0 {
+		return &InvalidArgumentError{Message: "at least one tag is required"}
+	}
+
+	body, err := json.Marshal(removeTemplateTagsRequest{Name: name, Tags: tags})
+	if err != nil {
+		return fmt.Errorf("e2b: marshal remove template tags request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.apiBaseURL+"/templates/tags", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("e2b: build remove template tags request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("e2b: send remove template tags request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	switch resp.StatusCode {
+	case http.StatusNoContent:
+		return nil
+	case http.StatusNotFound:
+		return &TemplateNotFoundError{TemplateID: name}
 	default:
 		respBody, _ := io.ReadAll(resp.Body)
 		return &Error{StatusCode: resp.StatusCode, Message: string(respBody)}

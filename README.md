@@ -324,6 +324,26 @@ sandbox.UpdateNetwork(e2b.NetworkUpdateConfig{
 })
 ```
 
+### Template tags
+
+Look up a template by alias (or namespaced `project/name`), list tags, and
+assign or remove labels on a build. Assign uses a source selector
+(`alias:existingTag` or `alias:<buildID>`); remove takes the template name,
+not `name:tag`. Never delete the `default` tag.
+
+```go
+alias, err := client.GetTemplateAlias(ctx, "my-template")
+if err != nil {
+    log.Fatal(err)
+}
+tags, err := client.ListTemplateTags(ctx, alias.TemplateID)
+assigned, err := client.AssignTemplateTags(ctx, "my-template:default", "staging")
+err = client.RemoveTemplateTags(ctx, "my-template", "staging")
+```
+
+A missing alias maps to `*TemplateNotFoundError`. HTTP 403 (no access to a
+public alias such as `base`) is returned as `*Error`, not not-found.
+
 ### Command Options
 
 | Option | Description |

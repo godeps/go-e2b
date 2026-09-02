@@ -1418,3 +1418,334 @@ func TestGetBuildStatusCanceled(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func newTemplateHTTPClient(t *testing.T, handler http.HandlerFunc) *Client {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	client, err := NewClient(ClientConfig{APIKey: "test-key", APIBaseURL: srv.URL})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	return client
+}
+
+func TestGetTemplateAliasSuccess(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		if got, want := r.URL.EscapedPath(), "/templates/aliases/my-template"; got != want {
+			t.Errorf("path = %s, want %s", got, want)
+		}
+		if got := r.Header.Get("X-API-Key"); got != "test-key" {
+			t.Errorf("X-API-Key = %q, want %q", got, "test-key")
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(TemplateAlias{TemplateID: "tmpl-1", Public: false})
+	})
+
+	got, err := client.GetTemplateAlias(context.Background(), "my-template")
+	if err != nil {
+		t.Fatalf("GetTemplateAlias: %v", err)
+	}
+	if got.TemplateID != "tmpl-1" {
+		t.Errorf("TemplateID = %q, want tmpl-1", got.TemplateID)
+	}
+	if got.Public {
+		t.Error("Public = true, want false")
+	}
+}
+
+func TestGetTemplateAliasPathEscapesSlash(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.EscapedPath(), "/templates/aliases/team-9da8%2Fmy-template"; got != want {
+			t.Errorf("path = %s, want %s", got, want)
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(TemplateAlias{TemplateID: "tmpl-1"})
+	})
+
+	if _, err := client.GetTemplateAlias(context.Background(), "team-9da8/my-template"); err != nil {
+		t.Fatalf("GetTemplateAlias: %v", err)
+	}
+}
+
+func TestGetTemplateAliasNotFound(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"code":404,"message":"template 'missing' not found"}`))
+	})
+
+	_, err := client.GetTemplateAlias(context.Background(), "missing")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var nfe *TemplateNotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected *TemplateNotFoundError, got %T: %v", err, err)
+	}
+	if nfe.TemplateID != "missing" {
+		t.Errorf("TemplateID = %q, want missing", nfe.TemplateID)
+	}
+}
+
+func TestGetTemplateAliasForbidden(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"code":403,"message":"You don't have access to this template alias"}`))
+	})
+
+	_, err := client.GetTemplateAlias(context.Background(), "base")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var nfe *TemplateNotFoundError
+	if errors.As(err, &nfe) {
+		t.Fatal("403 must not map to *TemplateNotFoundError")
+	}
+	var apiErr *Error
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *Error, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != http.StatusForbidden {
+		t.Errorf("StatusCode = %d, want 403", apiErr.StatusCode)
+	}
+}
+
+func TestGetTemplateAliasEmpty(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(http.ResponseWriter, *http.Request) {
+		t.Fatal("no HTTP request expected")
+	})
+
+	_, err := client.GetTemplateAlias(context.Background(), "")
+	var iae *InvalidArgumentError
+	if !errors.As(err, &iae) {
+		t.Fatalf("expected *InvalidArgumentError, got %T: %v", err, err)
+	}
+}
+
+func TestGetTemplateAliasCanceled(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(TemplateAlias{TemplateID: "tmpl-1"})
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := client.GetTemplateAlias(ctx, "my-template"); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestListTemplateTagsSuccess(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		if got, want := r.URL.EscapedPath(), "/templates/tmpl-1/tags"; got != want {
+			t.Errorf("path = %s, want %s", got, want)
+		}
+		if got := r.Header.Get("X-API-Key"); got != "test-key" {
+			t.Errorf("X-API-Key = %q, want %q", got, "test-key")
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode([]TemplateTag{
+			{Tag: "default", BuildID: "build-1", CreatedAt: "2026-05-12T19:36:02Z"},
+		})
+	})
+
+	tags, err := client.ListTemplateTags(context.Background(), "tmpl-1")
+	if err != nil {
+		t.Fatalf("ListTemplateTags: %v", err)
+	}
+	if len(tags) != 1 {
+		t.Fatalf("got %d tags, want 1", len(tags))
+	}
+	if tags[0].Tag != "default" || tags[0].BuildID != "build-1" {
+		t.Errorf("tag = %+v, want default/build-1", tags[0])
+	}
+}
+
+func TestListTemplateTagsPathEscapesSlash(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.EscapedPath(), "/templates/team-9da8%2Fmy-template/tags"; got != want {
+			t.Errorf("path = %s, want %s", got, want)
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode([]TemplateTag{})
+	})
+
+	if _, err := client.ListTemplateTags(context.Background(), "team-9da8/my-template"); err != nil {
+		t.Fatalf("ListTemplateTags: %v", err)
+	}
+}
+
+func TestListTemplateTagsNotFound(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	_, err := client.ListTemplateTags(context.Background(), "missing")
+	var nfe *TemplateNotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected *TemplateNotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestListTemplateTagsEmpty(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(http.ResponseWriter, *http.Request) {
+		t.Fatal("no HTTP request expected")
+	})
+
+	_, err := client.ListTemplateTags(context.Background(), "")
+	var iae *InvalidArgumentError
+	if !errors.As(err, &iae) {
+		t.Fatalf("expected *InvalidArgumentError, got %T: %v", err, err)
+	}
+}
+
+func TestAssignTemplateTagsSuccess(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/templates/tags" {
+			t.Errorf("path = %s, want /templates/tags", r.URL.Path)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", got)
+		}
+		if got := r.Header.Get("X-API-Key"); got != "test-key" {
+			t.Errorf("X-API-Key = %q, want %q", got, "test-key")
+		}
+		var body assignTemplateTagsRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body.Target != "my-template:default" {
+			t.Errorf("target = %q, want my-template:default", body.Target)
+		}
+		if len(body.Tags) != 2 || body.Tags[0] != "staging" || body.Tags[1] != "stable" {
+			t.Errorf("tags = %v, want [staging stable]", body.Tags)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(AssignedTemplateTags{
+			BuildID: "build-1",
+			Tags:    []string{"staging", "stable"},
+		})
+	})
+
+	got, err := client.AssignTemplateTags(context.Background(), "my-template:default", "staging", "stable")
+	if err != nil {
+		t.Fatalf("AssignTemplateTags: %v", err)
+	}
+	if got.BuildID != "build-1" {
+		t.Errorf("BuildID = %q, want build-1", got.BuildID)
+	}
+	if len(got.Tags) != 2 {
+		t.Errorf("Tags = %v, want 2 items", got.Tags)
+	}
+}
+
+func TestAssignTemplateTagsNotFound(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	_, err := client.AssignTemplateTags(context.Background(), "missing:default", "staging")
+	var nfe *TemplateNotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected *TemplateNotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestAssignTemplateTagsEmptyTags(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(http.ResponseWriter, *http.Request) {
+		t.Fatal("no HTTP request expected")
+	})
+
+	_, err := client.AssignTemplateTags(context.Background(), "my-template:default")
+	var iae *InvalidArgumentError
+	if !errors.As(err, &iae) {
+		t.Fatalf("expected *InvalidArgumentError, got %T: %v", err, err)
+	}
+}
+
+func TestAssignTemplateTagsEmptyTarget(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(http.ResponseWriter, *http.Request) {
+		t.Fatal("no HTTP request expected")
+	})
+
+	_, err := client.AssignTemplateTags(context.Background(), "", "staging")
+	var iae *InvalidArgumentError
+	if !errors.As(err, &iae) {
+		t.Fatalf("expected *InvalidArgumentError, got %T: %v", err, err)
+	}
+}
+
+func TestRemoveTemplateTagsSuccess(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("method = %s, want DELETE", r.Method)
+		}
+		if r.URL.Path != "/templates/tags" {
+			t.Errorf("path = %s, want /templates/tags", r.URL.Path)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", got)
+		}
+		var body removeTemplateTagsRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body.Name != "my-template" {
+			t.Errorf("name = %q, want my-template", body.Name)
+		}
+		if len(body.Tags) != 1 || body.Tags[0] != "staging" {
+			t.Errorf("tags = %v, want [staging]", body.Tags)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	if err := client.RemoveTemplateTags(context.Background(), "my-template", "staging"); err != nil {
+		t.Fatalf("RemoveTemplateTags: %v", err)
+	}
+}
+
+func TestRemoveTemplateTagsNotFound(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	err := client.RemoveTemplateTags(context.Background(), "missing", "staging")
+	var nfe *TemplateNotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected *TemplateNotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestRemoveTemplateTagsEmptyTags(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(http.ResponseWriter, *http.Request) {
+		t.Fatal("no HTTP request expected")
+	})
+
+	err := client.RemoveTemplateTags(context.Background(), "my-template")
+	var iae *InvalidArgumentError
+	if !errors.As(err, &iae) {
+		t.Fatalf("expected *InvalidArgumentError, got %T: %v", err, err)
+	}
+}
+
+func TestRemoveTemplateTagsEmptyName(t *testing.T) {
+	client := newTemplateHTTPClient(t, func(http.ResponseWriter, *http.Request) {
+		t.Fatal("no HTTP request expected")
+	})
+
+	err := client.RemoveTemplateTags(context.Background(), "", "staging")
+	var iae *InvalidArgumentError
+	if !errors.As(err, &iae) {
+		t.Fatalf("expected *InvalidArgumentError, got %T: %v", err, err)
+	}
+}
