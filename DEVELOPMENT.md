@@ -12,6 +12,26 @@ Generated Go code lives in `internal/gen/` and is committed to the repository.
 
 ---
 
+## Wire codec
+
+`envdClientOptions` in `sandbox.go` is the single place the codec is chosen, and
+it selects proto-JSON for every envd service client. This is not a preference:
+envd parses **every request body as JSON and ignores the request
+`Content-Type`**, so Connect's default protobuf body — `\n\x1f\n\t/bin/bash...` —
+is handed straight to the JSON parser and rejected with
+
+```
+400 Bad Request: invalid character '\x1c' looking for beginning of value
+```
+
+which fails every process and filesystem call. Responses are JSON either way.
+
+`envd_wire_test.go` pins this on the wire for both the streaming and the unary
+path. A test that talks to a Connect handler cannot catch a regression here:
+handlers decode either codec, so only the bytes actually sent are decisive.
+
+---
+
 ## One-time Setup
 
 Install the three tools needed for code generation. These are only required
@@ -102,6 +122,41 @@ make test    # go test ./... -race
 make lint    # golangci-lint run ./...
 make gosec   # gosec (excludes internal/gen)
 ```
+
+---
+
+## Running integration tests against a self-hosted deployment
+
+Set `E2B_API_KEY` and `E2B_API_URL`; the integration tests skip when no key is
+present. Bump the timeout, since the suite creates real sandboxes:
+
+```sh
+E2B_TEMPLATE=base go test -tags=integration -count=1 -timeout 25m ./...
+```
+
+Against an envd 0.5.2 deployment on Aliyun Function Compute
+(`https://api.cn-shanghai.e2b.fc.aliyuncs.com`), these upstream features are not
+available. Their tests fail there because of the deployment, not the SDK:
+
+| Feature | What the deployment answers |
+|---|---|
+| pause / auto-pause / auto-resume | `400 enableAutoPause requires snapshot feature to be enabled` |
+| template build (build, status, aliases, tags) | `400`, the build API is not enabled |
+| volumes | not routed |
+| sandbox list V2 | filters, ordering and pagination unsupported |
+| signed URLs | `403 access denied: X-Access-Token header is required` — this envd wants the token even on signed URLs |
+
+Three more fail because envd 0.5.2 does not match the test's expectation:
+
+| Test | envd 0.5.2 behaviour |
+|---|---|
+| `TestIntegrationFilesystemListNotFound` | `ListDir` on a missing path returns `200 {"entries":[]}`; `Stat` does return NotFound |
+| `TestIntegrationFilesystemSymlink` | `ListDir` omits `symlinkTarget` and reports the resolved type; the target is only visible through `Stat` |
+| `TestIntegrationCommandsBackgroundListKill` | `SendSignal` on a dead pid succeeds rather than returning NotFound, so a second `Kill` reports `true` |
+
+`WithFileUser` is a no-op there for filesystem RPCs: the user is ignored whether
+it travels as `X-User-ID` or as `Authorization: Basic`, and entries stay owned by
+the sandbox's default user (uid 1000).
 
 ---
 
