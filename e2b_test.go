@@ -1,7 +1,6 @@
 package e2b
 
 import (
-	"os"
 	"testing"
 )
 
@@ -22,10 +21,8 @@ func TestResolveAPIKey(t *testing.T) {
 	})
 
 	t.Run("empty", func(t *testing.T) {
-		// Ensure the env var is unset for this subtest.
-		if _, ok := os.LookupEnv(apiKeyEnv); ok {
-			t.Setenv(apiKeyEnv, "")
-		}
+		// See TestResolveAPIBaseURL: the ambient value must not leak in.
+		t.Setenv(apiKeyEnv, "")
 		got := resolveAPIKey("")
 		if got != "" {
 			t.Errorf("resolveAPIKey = %q, want %q", got, "")
@@ -50,6 +47,10 @@ func TestResolveAPIBaseURL(t *testing.T) {
 	})
 
 	t.Run("default", func(t *testing.T) {
+		// The suite is expected to run with E2B_API_URL exported when it points
+		// at a self-hosted deployment, so the default case has to clear it
+		// rather than inherit whatever the ambient environment holds.
+		t.Setenv(apiURLEnv, "")
 		got := resolveAPIBaseURL("")
 		if got != DefaultAPIBaseURL {
 			t.Errorf("got %q, want %q", got, DefaultAPIBaseURL)
@@ -74,6 +75,8 @@ func TestResolveSandboxDomain(t *testing.T) {
 	})
 
 	t.Run("default", func(t *testing.T) {
+		// See TestResolveAPIBaseURL: the ambient value must not leak in.
+		t.Setenv(sandboxURLEnv, "")
 		got := resolveSandboxDomain("")
 		if got != defaultSandboxDomain {
 			t.Errorf("got %q, want %q", got, defaultSandboxDomain)
