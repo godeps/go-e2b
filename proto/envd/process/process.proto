@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package process;
 
-option go_package = "github.com/matiasinsaurralde/go-e2b/internal/gen/envd/process;process";
+option go_package = "github.com/godeps/go-e2b/internal/gen/envd/process;process";
 
 service Process {
     rpc List(ListRequest) returns (ListResponse);

@@ -15,8 +15,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	filesystempb "github.com/matiasinsaurralde/go-e2b/internal/gen/envd/filesystem"
-	"github.com/matiasinsaurralde/go-e2b/internal/gen/envd/filesystem/filesystemconnect"
+	filesystempb "github.com/godeps/go-e2b/internal/gen/envd/filesystem"
+	"github.com/godeps/go-e2b/internal/gen/envd/filesystem/filesystemconnect"
 )
 
 // --- Connect RPC Filesystem test helpers ---

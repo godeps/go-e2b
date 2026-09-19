@@ -1,18 +1,18 @@
 # go-e2b
 
-[![CI](https://github.com/matiasinsaurralde/go-e2b/actions/workflows/ci.yml/badge.svg)](https://github.com/matiasinsaurralde/go-e2b/actions/workflows/ci.yml)
-[![Lint](https://github.com/matiasinsaurralde/go-e2b/actions/workflows/lint.yml/badge.svg)](https://github.com/matiasinsaurralde/go-e2b/actions/workflows/lint.yml)
-[![Security](https://github.com/matiasinsaurralde/go-e2b/actions/workflows/security.yml/badge.svg)](https://github.com/matiasinsaurralde/go-e2b/actions/workflows/security.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/matiasinsaurralde/go-e2b.svg)](https://pkg.go.dev/github.com/matiasinsaurralde/go-e2b)
-[![License: MIT](https://img.shields.io/github/license/matiasinsaurralde/go-e2b)](LICENSE)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/matiasinsaurralde/go-e2b)](go.mod)
+[![CI](https://github.com/godeps/go-e2b/actions/workflows/ci.yml/badge.svg)](https://github.com/godeps/go-e2b/actions/workflows/ci.yml)
+[![Lint](https://github.com/godeps/go-e2b/actions/workflows/lint.yml/badge.svg)](https://github.com/godeps/go-e2b/actions/workflows/lint.yml)
+[![Security](https://github.com/godeps/go-e2b/actions/workflows/security.yml/badge.svg)](https://github.com/godeps/go-e2b/actions/workflows/security.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/godeps/go-e2b.svg)](https://pkg.go.dev/github.com/godeps/go-e2b)
+[![License: MIT](https://img.shields.io/github/license/godeps/go-e2b)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/godeps/go-e2b)](go.mod)
 
 A Go SDK for the [E2B](https://e2b.dev) cloud sandbox API. E2B provides lightweight microVMs you can use to safely run arbitrary code in ephemeral environments.
 
 ## Installation
 
 ```sh
-go get github.com/matiasinsaurralde/go-e2b
+go get github.com/godeps/go-e2b
 ```
 
 ## Requirements
@@ -31,7 +31,7 @@ import (
     "log"
     "os"
 
-    e2b "github.com/matiasinsaurralde/go-e2b"
+    e2b "github.com/godeps/go-e2b"
 )
 
 func main() {
@@ -371,7 +371,7 @@ Configuration can be provided via `ClientConfig` / `SandboxConfig` fields or env
 ## Error Handling
 
 ```go
-import e2b "github.com/matiasinsaurralde/go-e2b"
+import e2b "github.com/godeps/go-e2b"
 
 _, err := e2b.NewClient(e2b.ClientConfig{APIKey: apiKey})
 switch {

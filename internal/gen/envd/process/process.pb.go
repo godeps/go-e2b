@@ -1815,7 +1815,7 @@ const file_envd_process_process_proto_rawDesc = "" +
 	"\n" +
 	"SendSignal\x12\x1a.process.SendSignalRequest\x1a\x1b.process.SendSignalResponse\x12E\n" +
 	"\n" +
-	"CloseStdin\x12\x1a.process.CloseStdinRequest\x1a\x1b.process.CloseStdinResponseBGZEgithub.com/matiasinsaurralde/go-e2b/internal/gen/envd/process;processb\x06proto3"
+	"CloseStdin\x12\x1a.process.CloseStdinRequest\x1a\x1b.process.CloseStdinResponseB<Z:github.com/godeps/go-e2b/internal/gen/envd/process;processb\x06proto3"
 
 var (
 	file_envd_process_process_proto_rawDescOnce sync.Once

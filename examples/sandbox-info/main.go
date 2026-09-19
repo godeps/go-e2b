@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/matiasinsaurralde/go-e2b"
+	"github.com/godeps/go-e2b"
 )
 
 func main() {

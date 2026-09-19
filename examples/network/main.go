@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	e2b "github.com/matiasinsaurralde/go-e2b"
+	e2b "github.com/godeps/go-e2b"
 )
 
 func main() {

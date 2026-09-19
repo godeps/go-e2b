@@ -1,4 +1,4 @@
-module github.com/matiasinsaurralde/go-e2b
+module github.com/godeps/go-e2b
 
 go 1.25
 

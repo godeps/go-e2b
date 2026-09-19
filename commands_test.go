@@ -11,7 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	processpb "github.com/matiasinsaurralde/go-e2b/internal/gen/envd/process"
+	processpb "github.com/godeps/go-e2b/internal/gen/envd/process"
 )
 
 // --- Run / Start ---

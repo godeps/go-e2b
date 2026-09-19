@@ -7,8 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	processpb "github.com/matiasinsaurralde/go-e2b/internal/gen/envd/process"
-	"github.com/matiasinsaurralde/go-e2b/internal/gen/envd/process/processconnect"
+	processpb "github.com/godeps/go-e2b/internal/gen/envd/process"
+	"github.com/godeps/go-e2b/internal/gen/envd/process/processconnect"
 )
 
 const (

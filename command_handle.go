@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	processpb "github.com/matiasinsaurralde/go-e2b/internal/gen/envd/process"
+	processpb "github.com/godeps/go-e2b/internal/gen/envd/process"
 )
 
 // startStream adapts a Start RPC server stream to eventStream.

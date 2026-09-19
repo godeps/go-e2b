@@ -20,7 +20,7 @@ proto-sync:
 		pkg=$$(sed -n 's/^package \([a-z0-9_]*\);/\1/p' $(PROTO_DST_DIR)/$$p | head -1); \
 		if ! grep -q "go_package" $(PROTO_DST_DIR)/$$p; then \
 			echo "  injecting go_package for package $$pkg"; \
-			sed -i '' "s|^package $$pkg;|package $$pkg;\n\noption go_package = \"github.com/matiasinsaurralde/go-e2b/$(GEN_DIR)/envd/$$pkg;$$pkg\";|" $(PROTO_DST_DIR)/$$p; \
+			sed -i '' "s|^package $$pkg;|package $$pkg;\n\noption go_package = \"github.com/godeps/go-e2b/$(GEN_DIR)/envd/$$pkg;$$pkg\";|" $(PROTO_DST_DIR)/$$p; \
 		fi; \
 	done
 	$(MAKE) generate

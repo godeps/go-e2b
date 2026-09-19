@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package filesystem;
 
-option go_package = "github.com/matiasinsaurralde/go-e2b/internal/gen/envd/filesystem;filesystem";
+option go_package = "github.com/godeps/go-e2b/internal/gen/envd/filesystem;filesystem";
 
 import "google/protobuf/timestamp.proto";
 

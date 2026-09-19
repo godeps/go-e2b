@@ -125,6 +125,6 @@ internal/
 ```
 
 The `go_package` option in the vendored proto is set to
-`github.com/matiasinsaurralde/go-e2b/internal/gen/envd/process` so the import
+`github.com/godeps/go-e2b/internal/gen/envd/process` so the import
 paths in generated code match the module layout. This option is injected by
 `make proto-sync` if the upstream file does not carry it.

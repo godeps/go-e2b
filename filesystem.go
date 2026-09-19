@@ -15,8 +15,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	filesystempb "github.com/matiasinsaurralde/go-e2b/internal/gen/envd/filesystem"
-	"github.com/matiasinsaurralde/go-e2b/internal/gen/envd/filesystem/filesystemconnect"
+	filesystempb "github.com/godeps/go-e2b/internal/gen/envd/filesystem"
+	"github.com/godeps/go-e2b/internal/gen/envd/filesystem/filesystemconnect"
 )
 
 const filesRoute = "/files"
