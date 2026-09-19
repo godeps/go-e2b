@@ -27,7 +27,11 @@ const (
 
 // processClient returns a Connect client for the sandbox's process service.
 func (s *Sandbox) processClient() processconnect.ProcessClient {
-	return processconnect.NewProcessClient(s.client.httpClient, s.envdBaseURL())
+	return processconnect.NewProcessClient(
+		s.client.httpClient,
+		s.envdBaseURL(),
+		envdClientOptions()...,
+	)
 }
 
 // setProcessAuthHeaders sets the headers required to authenticate an envd

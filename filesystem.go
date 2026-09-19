@@ -40,6 +40,97 @@ type FileInfo struct {
 	ModTime       time.Time `json:"-"`
 }
 
+// UnmarshalJSON decodes a FileInfo from the JSON envd emits on its /files route.
+//
+// That route does not speak proto-JSON: envd marshals its own protobuf
+// EntryInfo with encoding/json directly, which differs from the Connect RPC
+// responses in two ways — "type" arrives as the numeric FileType ordinal rather
+// than a symbolic name, and keys keep their protobuf field names, so a symlink
+// target is "symlink_target" and a timestamp is "modified_time". Decoding such a
+// response into the field's declared types fails outright:
+//
+//	json: cannot unmarshal number into Go struct field .0.type of type string
+//
+// Both values for "type" (number or name) and both spellings of the optional
+// keys are accepted, so a response from any envd build decodes. An absent or
+// unrecognised type leaves Type as "unknown" rather than failing the call.
+func (f *FileInfo) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Name         string          `json:"name"`
+		Path         string          `json:"path"`
+		Type         json.RawMessage `json:"type"`
+		Size         int64           `json:"size"`
+		Owner        string          `json:"owner"`
+		Group        string          `json:"group"`
+		SymlinkProto string          `json:"symlink_target"`
+		SymlinkJSON  string          `json:"symlinkTarget"`
+		Modified     string          `json:"modified_time"`
+		ModifiedJSON string          `json:"modifiedTime"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+
+	f.Name = wire.Name
+	f.Path = wire.Path
+	f.Type = fileTypeFromJSON(wire.Type)
+	f.Size = wire.Size
+	f.Owner = wire.Owner
+	f.Group = wire.Group
+	f.SymlinkTarget = wire.SymlinkProto
+	if f.SymlinkTarget == "" {
+		f.SymlinkTarget = wire.SymlinkJSON
+	}
+
+	// A timestamp envd cannot format as RFC 3339 leaves ModTime zero: the write
+	// itself succeeded, so it is not worth failing the call over.
+	stamp := wire.Modified
+	if stamp == "" {
+		stamp = wire.ModifiedJSON
+	}
+	if stamp != "" {
+		if parsed, err := time.Parse(time.RFC3339, stamp); err == nil {
+			f.ModTime = parsed
+		}
+	}
+	return nil
+}
+
+// fileTypeFromJSON maps the "type" field of a /files response to the FileInfo
+// representation, accepting either the numeric FileType ordinal envd sends or a
+// symbolic name.
+func fileTypeFromJSON(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	if raw[0] == '"' {
+		var name string
+		if err := json.Unmarshal(raw, &name); err != nil {
+			return fileTypeToString(filesystempb.FileType_FILE_TYPE_UNSPECIFIED)
+		}
+		return fileTypeFromName(name)
+	}
+	var ordinal int32
+	if err := json.Unmarshal(raw, &ordinal); err != nil {
+		return fileTypeToString(filesystempb.FileType_FILE_TYPE_UNSPECIFIED)
+	}
+	return fileTypeToString(filesystempb.FileType(ordinal))
+}
+
+// fileTypeFromName maps a symbolic entry type to the FileInfo representation.
+// It accepts both the protobuf enum name ("FILE_TYPE_DIRECTORY") and the short
+// name FileInfo documents ("directory").
+func fileTypeFromName(name string) string {
+	if value, ok := filesystempb.FileType_value[name]; ok {
+		return fileTypeToString(filesystempb.FileType(value))
+	}
+	switch name {
+	case "file", "directory", "symlink", "unknown":
+		return name
+	}
+	return fileTypeToString(filesystempb.FileType_FILE_TYPE_UNSPECIFIED)
+}
+
 // FilesystemService provides file read and write operations within a sandbox.
 type FilesystemService struct {
 	sandbox *Sandbox
@@ -57,6 +148,7 @@ func (f *FilesystemService) getFilesystemClient() filesystemconnect.FilesystemCl
 		f.fsClient = filesystemconnect.NewFilesystemClient(
 			f.sandbox.client.httpClient,
 			f.sandbox.envdBaseURL(),
+			envdClientOptions()...,
 		)
 	})
 	return f.fsClient

@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"connectrpc.com/connect"
 )
 
 // SandboxConfig holds the configuration for creating a new sandbox.
@@ -169,6 +171,22 @@ func (s *Sandbox) envdBaseURL() string {
 		host = s.client.sandboxDomain
 	}
 	return fmt.Sprintf("https://%d-%s.%s", envdPort, s.ID, host)
+}
+
+// envdClientOptions returns the Connect options every envd service client is
+// built with. It is the single place the wire codec is chosen.
+//
+// envd parses every request body as JSON and ignores the request's
+// Content-Type: a protobuf body — what Connect sends by default — is handed
+// straight to the JSON parser and rejected with
+//
+//	400 Bad Request: invalid character '\x1c' looking for beginning of value
+//
+// which fails every process and filesystem call. proto-JSON bodies are accepted,
+// and responses are JSON either way, so selecting the JSON codec costs nothing
+// and is what makes the SDK usable against these deployments.
+func envdClientOptions() []connect.ClientOption {
+	return []connect.ClientOption{connect.WithProtoJSON()}
 }
 
 // IsRunning checks whether the sandbox's envd daemon is healthy and
